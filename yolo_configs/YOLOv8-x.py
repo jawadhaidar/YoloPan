@@ -1,4 +1,4 @@
-_base_ = '/home/aub/mmyolo/configs/yolov8/yolov8_l_mask-refine_syncbn_fast_8xb16-500e_coco.py'
+_base_ = '/home/jawad/mmyolo/configs/yolov8/yolov8_l_mask-refine_syncbn_fast_8xb16-500e_coco.py'
 
 # This config use refining bbox and `YOLOv5CopyPaste`.
 # Refining bbox means refining bbox by mask while loading annotations and

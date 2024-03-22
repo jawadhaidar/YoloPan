@@ -21,7 +21,7 @@ def forward_hook_img(module, input, output):
     # print(f"Input : {input}")
     # print(f"Output shape : {output}")
     # print("===")
-    activation_img['inimg']=input[0]['inputs'][0]
+    activation_img['inimg']=input#input[0]['inputs'][0]
     activation_img['outimg']=output
 
 def forward_hook_stem(module, input, output):
@@ -49,8 +49,8 @@ def forward_hook_stage4(module, input, output):
 def main():
 
     #set up yolo 
-    yoloConfigPath="/home/aub/codes/YoloPan/yolo_configs/yolov8_n_mask-refine_syncb.py"
-    yoloModelPath="/home/aub/codes/YoloPan/yolo_models/yolov8_n_mask-refine.pth"
+    yoloConfigPath="/home/jawad/codes/YoloPan/yolo_configs/yolov8_n_mask-refine_syncb.py"
+    yoloModelPath="/home/jawad/codes/YoloPan/yolo_models/yolov8_n_mask-refine.pth"
     # yoloConfigPath="/home/aub/codes/YoloPan/yolo_configs/YOLOv8-x.py"
     # yoloModelPath="/home/aub/codes/YoloPan/yolo_models/yolov8_x_mask-refine_syncbn_fast_8xb16-500e_coco_20230217_120411-079ca8d1.pth"
     yoloModel=init_detector(yoloConfigPath, yoloModelPath, device='cuda')
@@ -67,10 +67,10 @@ def main():
 
     
     #set up parameters
-    num_classes=3 #including background
+    num_classes=91 + 1 #including background
 
     # Initialize your segmentation dataset (replace with your dataset class)
-    dataset = SemanticDataset(classes_threshold=num_classes,status="val") #not plus one since starts at 0
+    dataset = SemanticDataset(classes_threshold=num_classes,status="train") #not plus one since starts at 0
 
     # Set up data loader
     data_loader = DataLoader(dataset, batch_size=1, shuffle=True) #TODO: check num of workers
@@ -78,7 +78,7 @@ def main():
     # Define the segmentation model (replace with your preferred architecture)
     # modelseg = YoloSemSkipn(numClasses=num_classes) #+ 1 since we need 81 channels
                     
-    modelseg = torch.load("/home/aub/codes/YoloPan/trained_models/YoloSemSkipn_bn_cloudstree_epochs19.pth")
+    modelseg = torch.load("/home/jawad/codes/YoloPan/trained_models/YoloSemSkipn_bn_stuffall_epochs7.pth")
 
     # Move the model to GPU if available
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

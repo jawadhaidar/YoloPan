@@ -27,8 +27,8 @@ class SemanticDataset(Dataset):
         
         # self.img_path=f"/home/aub/mmdetection/data/coco/{status}2017" # config['DATA']['imgpath'] #
         # self.mask_path=f"/home/aub/datasets/stuffthingmaps_trainval2017/{status}2017" #config['DATA']['maskpath']
-        self.img_path=f"/home/aub/datasets/{status}sample2017/images" # config['DATA']['imgpath'] #
-        self.mask_path=f"/home/aub/datasets/{status}sample2017/semantic_labels" #config['DATA']['maskpath']
+        self.img_path=f"/home/jawad/datasets/{status}sample2017/images" # config['DATA']['imgpath'] #
+        self.mask_path=f"/home/jawad/datasets/{status}sample2017/semantic_labels" #config['DATA']['maskpath']
         self.img_names_list=sorted_alphanumeric(os.listdir( self.img_path))
         self.mask_names_list=sorted_alphanumeric(os.listdir( self.mask_path))
         self.num_imgs=len(self.img_names_list)
@@ -57,8 +57,9 @@ class SemanticDataset(Dataset):
         # L._resize_img({"img":mask})
         #you might need to choose the first 80 classes 
         #TODO: fix the background label 
-        i=self.LetterR._resize_img({"img":mask})
+        i=self.LetterR._resize_img({"img":mask}) # this was possible after dding return results to the source code
         # print(i)
+        # print(i["img"].shape)
         mask=i["img"][:,:,0]
 
 
@@ -170,14 +171,14 @@ class DownloadSampleDataset(Dataset):
     def __init__(self,transform=None,status="train"):
         #print(config['DATA']['imgpath'])
         self.status=status
-        self.img_path=f"/home/aub/mmdetection/data/coco/{self.status}2017" # config['DATA']['imgpath'] #
-        self.mask_path=f"/home/aub/datasets/stuffthingmaps_trainval2017/{self.status}2017" #config['DATA']['maskpath']
+        self.img_path=f"/home/jawad/datasets/coco/{self.status}2017" # config['DATA']['imgpath'] #
+        self.mask_path=f"/home/jawad/datasets/stuffthingmaps_trainval2017/{self.status}2017" #config['DATA']['maskpath']
         self.img_names_list=sorted_alphanumeric(os.listdir( self.img_path)) # this might be wrong
         self.mask_names_list=sorted_alphanumeric(os.listdir( self.mask_path)) # this might be wrong
         self.num_imgs=len(self.img_names_list)
         # self.chosen_classes=[17,18]
         # self.chosen_classes=[123,127]106
-        self.chosen_classes=[105,168]
+        self.chosen_classes=list(range(91,91+91)) #[105,168]
 
      
     #len 
@@ -202,10 +203,10 @@ class DownloadSampleDataset(Dataset):
             
             #zprint(mask)
             print(np.unique(mask_new))
-            
+            #create the folders automatically
             ##if true save the mask and img
-            cv.imwrite(rf'/home/aub/datasets/{self.status}sample2017/images/{self.img_names_list[index]}',img)  #not consistent
-            cv.imwrite(rf'/home/aub/datasets/{self.status}sample2017/semantic_labels/{self.mask_names_list[index]}',mask_new)    
+            cv.imwrite(rf'/home/jawad/datasets/{self.status}sample2017/images/{self.img_names_list[index]}',img)  #not consistent
+            cv.imwrite(rf'/home/jawad/datasets/{self.status}sample2017/semantic_labels/{self.mask_names_list[index]}',mask_new)    
 
 
         return img
@@ -214,7 +215,7 @@ class DownloadSampleDataset(Dataset):
 
 if __name__=="__main__":
     # L=LetterResize((640,640),use_mini_pad=False,stretch_only=False,allow_scale_up=False,half_pad_param=False)
-    dataset=DownloadSampleDataset(status="val")
+    dataset=DownloadSampleDataset(status="train")
     dataloader=DataLoader(dataset,batch_size=1,shuffle=
                           False)
 
