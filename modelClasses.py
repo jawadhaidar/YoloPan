@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchinfo 
 import numpy as np
 import torch.nn.functional as F
+from mmdet.apis import init_detector, inference_detector
 
 
 
@@ -174,35 +175,67 @@ class PyramidPoolingModule(nn.Module):
         return output
 
     
+class End2end(nn.Module):
+    def __init__(self,numClasses):
+        super().__init__()
+        yoloConfigPath="/home/jawad/codes/YoloPan/yolo_configs/yolov8_n_mask-refine_syncb.py"
+        yoloModelPath="/home/jawad/codes/YoloPan/yolo_models/yolov8_n_mask-refine.pth"
+        # yoloConfigPath="/home/aub/codes/YoloPan/yolo_configs/YOLOv8-x.py"
+        # yoloModelPath="/home/aub/codes/YoloPan/yolo_models/yolov8_x_mask-refine_syncbn_fast_8xb16-500e_coco_20230217_120411-079ca8d1.pth"
+        self.yoloModel=init_detector(yoloConfigPath, yoloModelPath, device='cuda')
+        # self.yoloModel(torch.rand(1,3,640,640).to('cuda'))
+        #change the right parameters to training model
+        for name,module in self.yoloModel.named_children():
+            print(name)
+            if name =='bbox_head':
+                for _, param in module.named_parameters():
+                    param.requires_grad = False
+            else:
+                for _, param in module.named_parameters():
+                    param.requires_grad = True
+
+
+        #break it down
+        self.dataprocess=self.yoloModel.data_preprocessor
+        #test
+        self.backbone=self.yoloModel.backbone
+        self.neck=self.yoloModel.neck 
+        self.bbox_head=self.yoloModel.bbox_head
+        #segmentation model
+        self.seg=YoloSemSkipn(numClasses).to('cuda')
+
+    def forward(self,x):
+        #dataprocess
+        x=self.dataprocess(x)
+        input=x['inputs']
+        print(input.is_cuda)
+        #backbone sequential
+        stem=self.backbone.stem(input)
+        stage1=self.backbone.stage1(stem)
+        stage2=self.backbone.stage2(stage1)
+        stage3=self.backbone.stage3(stage2)
+        stage4=self.backbone.stage4(stage3)
+       
+
+   
+        #neck
+        out=self.neck((stage2,stage3,stage4))
+        #boxhead
+        outbox=self.bbox_head(out)
+        #semhead
+        out=self.seg(out[0],stage1,stem) #0 or 2
+
+        return out
+
+
 
         
 if __name__=="__main__":
 
-    # sem=YoloSem(80).to(device="cuda")
-    # torchinfo.summary(sem,(1,320,80,80))
-   # Example usage of the Pyramid Pooling Module
-    in_channels = 256  # Number of input channels
-    out_channels = 128  # Number of output channels
-    pool_sizes = [1, 2, 3, 6]  # List of pooling kernel sizes (or output sizes for adaptive pooling)
+    model=End2end(numClasses=3)
 
-    # Initialize the Pyramid Pooling Module with the example parameters
-    ppm = PyramidPoolingModule(in_channels, out_channels, pool_sizes)
-
-    # Generate example input feature map
-    batch_size = 4
-    height = 64
-    width = 64
-    x = torch.randn(batch_size, in_channels, height, width)
-
-    # Forward pass through the Pyramid Pooling Module
-    output = ppm(x)
-
-    # Print the shape of the output feature map
-    print("Output shape:", output.shape)
-    #upsampel 
-    upsampled_output = F.interpolate(output, size=(640,640), mode='bilinear', align_corners=False)
-    print("Outupsampled_outputput shape:", upsampled_output.shape)
-    model=YoloSemPPM(numClasses=3)
-    o=model(x)
-    print(o.shape)
-    torchinfo.summary(model,(1,256,64,64))
+    torchinfo.summary(model)
+    result=model({'inputs':torch.rand(1,3,640,640).to('cuda')})
+    # print(result)
+    # print(model.backbone)
+    # print(model.backbone.stage4)
