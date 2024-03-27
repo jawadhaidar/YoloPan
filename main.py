@@ -6,68 +6,38 @@ from helper_functions import*
 from dataclass import*
 from modelClasses import*
 from loss_fn import*
+import segmentation_models_pytorch as smp
 
-activation={}
-def forward_hook(module, input, output):
-    # print(f"Forward hook called for {module.__class__.__name__}")
-    # print(f"Input : {input}")
-    # print(f"Output shape : {output.shape}")
-    # print("===")
-    activation['out']=output
 
-activation_img={}
-def forward_hook_img(module, input, output):
-    # print(f"Forward hook called for {module.__class__.__name__}")
-    # print(f"Input : {input}")
-    # print(f"Output shape : {output}")
-    # print("===")
-    activation_img['inimg']=input#input[0]['inputs'][0]
-    activation_img['outimg']=output
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
 
-def forward_hook_stem(module, input, output):
-    # print(f"Forward hook called for {module.__class__.__name__}")
-    # print(f"Input : {input}")
-    # print(f"Output shape : {output.shape}")
-    # print("===")
-    activation['outstem']=output
+    def forward(self, outputs, targets):
+        ce_loss = nn.CrossEntropyLoss(reduction='none')(outputs, targets)
 
-def forward_hook_stage1(module, input, output):
-    # print(f"Forward hook called for {module.__class__.__name__}")
-    # print(f"Input : {input}")
-    # print(f"Output shape : {output.shape}")
-    # print("===")
-    activation['outstage1']=output
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
 
-def forward_hook_stage4(module, input, output):
-    # print(f"Forward hook called for {module.__class__.__name__}")
-    # print(f"Input : {input}")
-    # print(f"Output shape : {output.shape}")
-    # print("===")
-    activation['outstage4']=output
-
+        if self.reduction == 'mean':
+            return torch.mean(focal_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(focal_loss)
+        else:
+            return focal_loss
 
 def main():
 
-    #set up yolo 
-    yoloConfigPath="/home/jawad/codes/YoloPan/yolo_configs/yolov8_n_mask-refine_syncb.py"
-    yoloModelPath="/home/jawad/codes/YoloPan/yolo_models/yolov8_n_mask-refine.pth"
-    # yoloConfigPath="/home/aub/codes/YoloPan/yolo_configs/YOLOv8-x.py"
-    # yoloModelPath="/home/aub/codes/YoloPan/yolo_models/yolov8_x_mask-refine_syncbn_fast_8xb16-500e_coco_20230217_120411-079ca8d1.pth"
-    yoloModel=init_detector(yoloConfigPath, yoloModelPath, device='cuda')
-    # Freeze all parameters in the model
-    for param in yoloModel.parameters():
-        param.requires_grad = False
-    #register hook
-    # print(yoloModel)
-    yoloModel.data_preprocessor.register_forward_hook(forward_hook_img)
-    yoloModel.neck.top_down_layers[1].register_forward_hook(forward_hook)
-    yoloModel.backbone.stem.register_forward_hook(forward_hook_stem)
-    yoloModel.backbone.stage1.register_forward_hook(forward_hook_stage1)
-    yoloModel.backbone.stage4.register_forward_hook(forward_hook_stage4)
+
 
     
     #set up parameters
-    num_classes=91 + 1 #including background
+    # num_classes=1 + 1 #including background
+    #experiment for other label
+    num_classes=1 + 1 + 1#including other and background
 
     # Initialize your segmentation dataset (replace with your dataset class)
     dataset = SemanticDataset(classes_threshold=num_classes,status="train") #not plus one since starts at 0
@@ -77,8 +47,20 @@ def main():
 
     # Define the segmentation model (replace with your preferred architecture)
     # modelseg = YoloSemSkipn(numClasses=num_classes) #+ 1 since we need 81 channels
-                    
-    modelseg = torch.load("/home/jawad/codes/YoloPan/trained_models/YoloSemSkipn_bn_stuffall_epochs7.pth")
+    modelseg=End2end(numClasses=num_classes)
+    # modelseg = torch.load("/home/jawad/codes/YoloPan/trained_models/YoloSemSkipn_bn_fenceother_allparm_epochs1.pth").eval()
+    #experiment: try unet 
+    # modelseg = smp.Unet(
+    #     encoder_name="resnet34",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+    #     encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+    #     in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+    #     classes=num_classes,                      # model output channels (number of classes in your dataset)
+    # )
+    # for name,param in modelseg.named_parameters():
+    #     print(name)
+    #     param.requires_grad=True
+    # modelseg = torch.load("/home/jawad/codes/YoloPan/trained_models/YoloSemSkipn_bn_stairshouse_allparm_unet_myresize_epochs9.pth").eval()
+
 
     # Move the model to GPU if available
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -89,17 +71,19 @@ def main():
 
     
     # Define loss function and optimizer
-    criterion = torch.nn.CrossEntropyLoss()
+    # criterion = torch.nn.CrossEntropyLoss()
+    criterion = FocalLoss(alpha=1, gamma=2)
+
     # criterion=DiceLoss()
     
     optimizer = optim.SGD(modelseg.parameters(), lr=0.01, momentum=0.9)
 
     # Set the number of training epochs
-    num_epochs = 100
+    num_epochs = 25
 
     # Training loop
     print(f'dataset size {len(dataset.img_names_list)}')
-    train_semantic_segmentation(yoloModel, modelseg, data_loader, criterion, optimizer,num_epochs,activation,activation_img, device)
+    train_semantic_segmentation(modelseg, data_loader, criterion, optimizer,num_epochs, device)
     # inference_semantic_segmentation(modelseg, data_loader,device)
     # torchinfo.summary(model,(1,64,80,80))
 

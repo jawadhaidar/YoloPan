@@ -36,7 +36,9 @@ class SemanticDataset(Dataset):
         self.transform=transform
         self.classes_thr=classes_threshold #including background
         self.target_size=(640,640)
-        self.LetterR=LetterResize((640,640),pad_val={'img':255},use_mini_pad=False,stretch_only=False,allow_scale_up=False,half_pad_param=False)
+        self.LetterRseg=LetterResize((640,640),pad_val={'img':255},use_mini_pad=False,stretch_only=False,allow_scale_up=False,half_pad_param=False)
+        self.LetterRimg=LetterResize((640,640),pad_val={'img':114},use_mini_pad=False,stretch_only=False,allow_scale_up=False,half_pad_param=False)
+        #TODO: the difference in pad values might be confusing for the model
         '''
         pad val here might be missleading 
         it is used for mask not image 
@@ -57,10 +59,16 @@ class SemanticDataset(Dataset):
         # L._resize_img({"img":mask})
         #you might need to choose the first 80 classes 
         #TODO: fix the background label 
-        i=self.LetterR._resize_img({"img":mask}) # this was possible after dding return results to the source code
-        # print(i)
-        # print(i["img"].shape)
-        mask=i["img"][:,:,0]
+        # seg=self.LetterRseg._resize_img({"img":mask}) # this was possible after dding return results to the source code
+        mask=self.LetterRseg._resize_img({"img":mask})["img"][:,:,0]
+        #img
+        # im=self.LetterRimg._resize_img({"img":img}) # this was possible after dding return results to the source code
+        img=self.LetterRimg._resize_img({"img":img})['img']
+        # print(img.shape,mask.shape)
+        #experiment resize
+        # img,mask=self.resize_image_and_mask(img, mask, (640,640))
+
+      
 
 
 
@@ -77,7 +85,29 @@ class SemanticDataset(Dataset):
             pass
 
 
-        return path_img,mask
+        return img,mask
+    
+    def resize_image_and_mask(self,image, mask, new_size):
+        """
+        Resize the input image and its corresponding mask to the specified size.
+
+        Args:
+        - image (numpy.ndarray): The input image.
+        - mask (numpy.ndarray): The corresponding mask image.
+        - new_size (tuple): A tuple specifying the new size (width, height).
+
+        Returns:
+        - resized_image (numpy.ndarray): The resized image.
+        - resized_mask (numpy.ndarray): The resized mask.
+        """
+
+        # Resize the image
+        resized_image = cv.resize(image, new_size)
+
+        # Resize the mask
+        resized_mask = cv.resize(mask, new_size, interpolation=cv.INTER_NEAREST)
+
+        return resized_image, resized_mask[:,:,0]
 
     def sem_resize(self,gt_sem,pad_size):
         #resize to the largest volume inside the 640x640
@@ -176,9 +206,10 @@ class DownloadSampleDataset(Dataset):
         self.img_names_list=sorted_alphanumeric(os.listdir( self.img_path)) # this might be wrong
         self.mask_names_list=sorted_alphanumeric(os.listdir( self.mask_path)) # this might be wrong
         self.num_imgs=len(self.img_names_list)
-        # self.chosen_classes=[17,18]
-        # self.chosen_classes=[123,127]106
-        self.chosen_classes=list(range(91,91+91)) #[105,168]
+        # self.chosen_classes=[16,17]
+        # self.chosen_classes=[160,127]#stairs house
+        self.chosen_classes=[112]
+        # self.chosen_classes=list(range(91,91+91)) #[105,168]
 
      
     #len 
@@ -211,11 +242,75 @@ class DownloadSampleDataset(Dataset):
 
         return img
     
+class DownloadSampleDatasetOther(Dataset):
+    #constructer
+    '''remove the things then download'''
+    def __init__(self,transform=None,status="train"):
+        #print(config['DATA']['imgpath'])
+        self.status=status
+        self.img_path=f"/home/jawad/datasets/coco/{self.status}2017" # config['DATA']['imgpath'] #
+        self.mask_path=f"/home/jawad/datasets/stuffthingmaps_trainval2017/{self.status}2017" #config['DATA']['maskpath']
+        self.img_names_list=sorted_alphanumeric(os.listdir( self.img_path)) # this might be wrong
+        self.mask_names_list=sorted_alphanumeric(os.listdir( self.mask_path)) # this might be wrong
+        self.num_imgs=len(self.img_names_list)
+        # self.chosen_classes=[16,17]
+        # self.chosen_classes=[160,127]#stairs house
+        self.chosen_classes=[112]
+        # self.chosen_classes=list(range(91,91+91)) #[105,168]
+
+     
+    #len 
+    def __len__(self):
+        return  self.num_imgs
+
+    #getitem
+    def __getitem__(self, index):
+        #read image 
+        img=cv.imread(os.path.join(self.img_path,self.img_names_list[index]))
+        #print(img.shape)
+        #read label image
+        mask=cv.imread(os.path.join(self.mask_path,self.mask_names_list[index]),cv.IMREAD_GRAYSCALE) 
+        unique_list=np.unique(mask).tolist()
+        # print(unique_list)
+        temp=[i for i in self.chosen_classes if i in unique_list]
+        mask_new=np.ones_like(mask)*len(self.chosen_classes) #TODO: this is for other
+        mask_new[mask==255]=len(self.chosen_classes) + 1 #This is a label for background
+        if len(temp)>0:
+            #set all other classes to len(self.chosen_classes)
+            for id,c in enumerate(self.chosen_classes):
+                mask_new[mask==c]=id
+            
+            #zprint(mask)
+            print(np.unique(mask_new))
+            #create the folders automatically
+            ##if true save the mask and img
+            cv.imwrite(rf'/home/jawad/datasets/{self.status}sample2017/images/{self.img_names_list[index]}',img)  #not consistent
+            cv.imwrite(rf'/home/jawad/datasets/{self.status}sample2017/semantic_labels/{self.mask_names_list[index]}',mask_new)    
+
+
+        return img
+    
     
 
 if __name__=="__main__":
+    import matplotlib.pyplot as plt
+
+    def visualize_image_and_mask(image, mask):
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+        
+        # Display the image
+        axes[0].imshow(image)
+        axes[0].set_title('Image')
+        axes[0].axis('off')
+        
+        # Display the mask
+        axes[1].imshow(mask, cmap='gray')
+        axes[1].set_title('Mask')
+        axes[1].axis('off')
+        
+        plt.show()
     # L=LetterResize((640,640),use_mini_pad=False,stretch_only=False,allow_scale_up=False,half_pad_param=False)
-    dataset=DownloadSampleDataset(status="train")
+    dataset=DownloadSampleDatasetOther(status="train")
     dataloader=DataLoader(dataset,batch_size=1,shuffle=
                           False)
 
@@ -224,3 +319,16 @@ if __name__=="__main__":
 
         print(id)
         
+       
+    # num_classes=91 + 1 #including background
+
+    # # Initialize your segmentation dataset (replace with your dataset class)
+    # dataset = SemanticDataset(classes_threshold=num_classes,status="train") #not plus one since starts at 0
+
+    # # Set up data loader
+    # data_loader = DataLoader(dataset, batch_size=1, shuffle=True) #TODO: check num of workers
+
+    # for data in data_loader:
+    #     img,mask=data
+    #     print(1)
+    #     visualize_image_and_mask(img[0], mask[0])

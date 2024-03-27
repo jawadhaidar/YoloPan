@@ -208,7 +208,6 @@ class End2end(nn.Module):
         #dataprocess
         x=self.dataprocess(x)
         input=x['inputs']
-        print(input.is_cuda)
         #backbone sequential
         stem=self.backbone.stem(input)
         stage1=self.backbone.stage1(stem)
@@ -216,15 +215,17 @@ class End2end(nn.Module):
         stage3=self.backbone.stage3(stage2)
         stage4=self.backbone.stage4(stage3)
        
-
-   
         #neck
         out=self.neck((stage2,stage3,stage4))
         #boxhead
-        outbox=self.bbox_head(out)
+        # outbox=self.bbox_head(out)
         #semhead
         out=self.seg(out[0],stage1,stem) #0 or 2
-
+        del stem
+        del stage1
+        del stage2
+        del stage3
+        del stage4
         return out
 
 
